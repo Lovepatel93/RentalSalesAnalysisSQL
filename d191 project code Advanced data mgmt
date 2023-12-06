@@ -1,0 +1,109 @@
+-- How many rental sales each employee had?
+-- Tables needed to answer the above question:
+--rental and staff table needed
+
+--Business Question: How many rental sales each employee had?
+
+--B. Create Tables (Detailed and Summary)
+
+--Detailed Table
+
+DROP TABLE if EXISTS detailed;
+CREATE TABLE detailed (
+	rental_id integer primary key, --rental
+	rental_date DATE, --rental
+	inventory_id integer, --rental
+	staff_id integer, --staff
+	first_name varchar, --staff
+	last_name varchar, --staff
+	email varchar --staff
+);
+
+--Summary Table
+
+DROP TABLE if EXISTS summary;
+CREATE TABLE summary (
+	staff_name varchar, --concatenate first and last name for transformation
+	staff_id integer primary key, --staff
+	rental_count integer
+);
+
+
+-- C. Write a SQL query that will extract the raw data needed for the Detailed section of your report from the source database and verify the data’s accuracy.
+
+INSERT INTO detailed (
+	rental_id, --rental
+	rental_date, --rental
+	inventory_id, --rental
+	staff_id, --staff
+	first_name, --staff
+	last_name, --staff
+	email --staff
+)
+SELECT
+	r.rental_id, r.rental_date, r.inventory_id,
+	s.staff_id, s.first_name, s.last_name, s.email
+FROM staff AS s
+INNER JOIN rental AS r ON s.staff_id = r.staff_id;
+-- This loads information into the detailed table.
+
+--drop function refreshSummary() cascade
+CREATE FUNCTION refreshSummary()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+DELETE FROM summary; --emptying summary
+
+INSERT INTO summary
+	SELECT
+		concat_ws(' ', first_name, last_name) AS staff_name,
+		staff_id,
+		COUNT(staff_id)
+	FROM detailed
+	GROUP BY staff_id, staff_name
+	ORDER BY count(staff_id)DESC
+	LIMIT 90;
+
+RETURN NEW;
+END;
+$$; --function To refresh summary
+
+-- E. Write a SQL code that creates a trigger on the detailed table of the report that will continually update the summary table as data is added to the detailed table.
+CREATE TRIGGER summaryRefresh
+	AFTER INSERT ON detailed
+	FOR EACH STATEMENT
+	EXECUTE PROCEDURE refreshSummary();
+-- F. Create a stored procedure that can be used to refresh the data in both your detailed and summary tables. The procedure should clear the contents of the detailed and summary tables and perform the ETL load process from part C.
+--drop procedure refreshBoth() cascade
+CREATE PROCEDURE refreshBoth() -- Should be executed weekly or monthly depending 									on the salary period of the staff.
+LANGUAGE plpgsql
+AS $$
+BEGIN
+
+DELETE FROM detailed; --to empty the detailed table
+INSERT INTO detailed (
+	rental_id, --rental
+	rental_date, --rental
+	inventory_id, --rental
+	staff_id, --staff
+	first_name, --staff
+	last_name, --staff
+	email --staff
+)
+SELECT
+	r.rental_id, r.rental_date, r.inventory_id,
+	s.staff_id, s.first_name, s.last_name, s.email
+FROM staff AS s
+INNER JOIN rental AS r ON s.staff_id = r.staff_id;
+-- new data gets back in the detailed table
+
+END; $$;
+
+CALL refreshBoth(); -- to call the procedure above
+
+
+--below code is to view the result
+
+SELECT* FROM detailed;
+SELECT* FROM summary; 
